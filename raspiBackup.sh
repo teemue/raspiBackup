@@ -28,6 +28,12 @@
 #
 #######################################################################################################################
 
+if [ -z "$BASH" ] ;then
+	echo "??? ERROR: Unable to execute script. bash interpreter missing."
+	echo "??? DEBUG: $(lsof -a -p $$ -d txt | tail -n 1)"
+	exit 127
+fi
+
 MYSELF=${0##*/}
 MYNAME=${MYSELF%.*}
 
@@ -62,11 +68,11 @@ IS_BETA=$(( ! $(grep -iq beta <<< "$VERSION"; echo $?) ))
 IS_DEV=$(( ! $(grep -iq dev <<< "$VERSION"; echo $?) ))
 IS_HOTFIX=$(( ! $(grep -iq hotfix <<< "$VERSION"; echo $?) ))
 
-GIT_DATE="$Date: 2021-05-20 21:07:10 +0200$"
+GIT_DATE="$Date: 2021-07-21 19:47:04 +0200$"
 GIT_DATE_ONLY=${GIT_DATE/: /}
 GIT_DATE_ONLY=$(cut -f 2 -d ' ' <<< $GIT_DATE)
 GIT_TIME_ONLY=$(cut -f 3 -d ' ' <<< $GIT_DATE)
-GIT_COMMIT="$Sha1: 70652dd$"
+GIT_COMMIT="$Sha1: 9df3c1e$"
 GIT_COMMIT_ONLY=$(cut -f 2 -d ' ' <<< $GIT_COMMIT | sed 's/\$//')
 
 GIT_CODEVERSION="$MYSELF $VERSION, $GIT_DATE_ONLY/$GIT_TIME_ONLY - $GIT_COMMIT_ONLY"
