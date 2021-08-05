@@ -68,11 +68,11 @@ IS_BETA=$(( ! $(grep -iq beta <<< "$VERSION"; echo $?) ))
 IS_DEV=$(( ! $(grep -iq dev <<< "$VERSION"; echo $?) ))
 IS_HOTFIX=$(( ! $(grep -iq hotfix <<< "$VERSION"; echo $?) ))
 
-GIT_DATE="$Date: 2021-07-21 19:47:04 +0200$"
+GIT_DATE="$Date: 2021-08-05 16:38:42 +0200$"
 GIT_DATE_ONLY=${GIT_DATE/: /}
 GIT_DATE_ONLY=$(cut -f 2 -d ' ' <<< $GIT_DATE)
 GIT_TIME_ONLY=$(cut -f 3 -d ' ' <<< $GIT_DATE)
-GIT_COMMIT="$Sha1: 9df3c1e$"
+GIT_COMMIT="$Sha1: 89f476b$"
 GIT_COMMIT_ONLY=$(cut -f 2 -d ' ' <<< $GIT_COMMIT | sed 's/\$//')
 
 GIT_CODEVERSION="$MYSELF $VERSION, $GIT_DATE_ONLY/$GIT_TIME_ONLY - $GIT_COMMIT_ONLY"
@@ -136,7 +136,7 @@ DD_WARNING_URL_DE="$MYHOMEURL/de/raspibackupcategorie/579-raspibackup-warum-soll
 DD_WARNING_URL_EN="$MYHOMEURL/en/all-pages-about-raspibackup/581-raspibackup-why-shouldn-t-you-use-dd-as-backup-method/"
 
 CALLING_USER="$(findUser)"
-[[ "$CALLING_USER" == "root" ]] && CALLING_HOME="/root" || CALLING_HOME="/home/$CALLING_USER"
+CALLING_HOME="$(getent passwd $CALLING_USER | cut -f6 -d:)"
 
 PROPERTY_FILE="$MYNAME.properties"
 LATEST_TEMP_PROPERTY_FILE="/tmp/$PROPERTY_FILE"
@@ -192,7 +192,7 @@ done
 LOG_OUTPUT_VARLOG=1
 LOG_OUTPUT_BACKUPLOC=2
 LOG_OUTPUT_HOME=3
-POSSIBLE_LOG_OUTPUT_NUMBERs="[$LOG_OUTPUT_BACKUPLOC$LOG_OUTPUT_HOME$LOG_OUTPUT_VARLOG]"
+POSSIBLE_LOG_OUTPUT_NUMBERs="^[$LOG_OUTPUT_BACKUPLOC|$LOG_OUTPUT_HOME|$LOG_OUTPUT_VARLOG]\$"
 
 LOG_OUTPUT_IS_NO_USERDEFINEDFILE_REGEX="[$LOG_OUTPUT_VARLOG$LOG_OUTPUT_BACKUPLOC$LOG_OUTPUT_HOME]"
 declare -A LOG_OUTPUT_LOCs=( [$LOG_OUTPUT_VARLOG]="/var/log/raspiBackup/<hostname>.log" [$LOG_OUTPUT_BACKUPLOC]="<backupPath>" [$LOG_OUTPUT_HOME]="~/raspiBackup.log")
@@ -1376,12 +1376,12 @@ function logEnable() {
 	exec 1> >(stdbuf -i0 -o0 -e0 tee -ia "$LOG_FILE")
 	exec 2> >(stdbuf -i0 -o0 -e0 tee -ia "$LOG_FILE" >&2)
 
+	logItem "$GIT_CODEVERSION"
 	local sep="$(getLocalizedMessage $MSG_SENSITIVE_SEPARATOR)"
 	local warn="$(getLocalizedMessage $MSG_SENSITIVE_WARNING)"
 	logItem "$sep"
 	logItem "$warn"
 	logItem "$sep"
-
 }
 
 # move temporary log file to it's destination
@@ -1420,6 +1420,15 @@ function logFinish() {
 		*) # option -L <filename>
 			DEST_LOGFILE="$LOG_OUTPUT"
 			mv "$LOG_FILE" "$DEST_LOGFILE"
+
+			if [[ "$DEST_LOGFILE" =~ \.log$ ]]; then
+				DEST_MSGFILE="$(sed "s/\.log$/\.msg/" <<< "$DEST_LOGFILE")" # replace .log extension
+			else
+				DEST_MSGFILE="$DEST_LOGFILE.msg"
+			fi
+			cp "$MSG_FILE" "$DEST_MSGFILE"
+			chown "$CALLING_USER:$CALLING_USER" "$DEST_MSGFILE"
+			set +x
 	esac
 
 	LOG_FILE="$DEST_LOGFILE"
@@ -3841,10 +3850,6 @@ function checkImportantParameters() {
 		loa="$(tr '[:lower:]' '[:upper:]'<<< ${LOG_OUTPUT_ARGs[$lo]+abc})"
 		if [[ "$loa" == "ABC" ]]; then
 			LOG_OUTPUT=${LOG_OUTPUT_ARGs[$lo]}
-		else
-			writeToConsole $MSG_LEVEL_MINIMAL $MSG_INVALID_LOG_OUTPUT "$LOG_OUTPUT"
-			LOG_OUTPUT=$LOG_OUTPUT_HOME
-			exitError $RC_PARAMETER_ERROR
 		fi
 	fi
 
@@ -4676,9 +4681,9 @@ function restore() {
 					local excludePattern="--exclude=/$HOSTNAME-backup.*"
 					logItem "Excluding excludePattern"
 					if (( $PROGRESS )); then
-						cmd="rsync --info=progress2 --numeric-ids -aHX$verbose $excludePattern \"$ROOT_RESTOREFILE/\" $MNT_POINT"
+						cmd="rsync --info=progress2 --numeric-ids ${RSYNC_BACKUP_OPTIONS}${verbose} ${RSYNC_BACKUP_ADDITIONAL_OPTIONS} $excludePattern \"$ROOT_RESTOREFILE/\" $MNT_POINT"
 					else
-						cmd="rsync --numeric-ids -aHX$verbose $excludePattern \"$ROOT_RESTOREFILE/\" $MNT_POINT"
+						cmd="rsync --numeric-ids ${RSYNC_BACKUP_OPTIONS}${verbose} ${RSYNC_BACKUP_ADDITIONAL_OPTIONS} $excludePattern \"$ROOT_RESTOREFILE/\" $MNT_POINT"
 					fi
 					executeCommand "$cmd"
 					rc=$?
@@ -7409,7 +7414,7 @@ function checkOptionParameter() { # option parameter
 		echo "${2:1}"
 		logExit "${2:1}"
 		return 0
-	elif [[ "$2" =~ ^(\-|\+|\-\-|\+\+) || -z $2 ]]; then
+	elif [[ "$2" =~ ^(\-|\+|\-\-|\+\+) || -z "$2" ]]; then
 		writeToConsole $MSG_LEVEL_MINIMAL $MSG_OPTION_REQUIRES_PARAMETER "$1"
 		writeToConsole $MSG_LEVEL_MINIMAL $MSG_MENTION_HELP $MYSELF
 		echo ""
